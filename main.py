@@ -127,7 +127,9 @@ def plot_glucose_curve(data):
     ax.xaxis.set_major_locator(mdates.HourLocator(interval=1))
     ax.xaxis.set_major_formatter(mdates.DateFormatter('%H:%M'))
     
-    ax.set_title('每日血糖模式', fontsize=16)
+    # 從資料中取得日期，並設定為圖表標題
+    date_str = timestamps[0].strftime('%Y/%m/%d')
+    ax.set_title(f'{date_str} 血糖記錄', fontsize=16)
     ax.grid(axis='x', linestyle='--', color='gray', alpha=0.5)
     
     # --- 繪製備註 (最終版) ---
