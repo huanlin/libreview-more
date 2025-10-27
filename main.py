@@ -4,10 +4,10 @@ import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
 from matplotlib.font_manager import fontManager
 
-# --- 自动设定中文字型 ---
+# --- 自動設定中文字型 ---
 def set_chinese_font():
     """
-    自动寻找并设定可用的中文字型。
+    自動尋找並設定可用的中文字型。
     """
     supported_fonts = [
         'Microsoft JhengHei',  # Windows - 微軟正黑體
@@ -18,20 +18,20 @@ def set_chinese_font():
     
     for font_name in supported_fonts:
         try:
-            # 检查字型是否存在
+            # 檢查字型是否存在
             if any(font.name == font_name for font in fontManager.ttflist):
                 plt.rcParams['font.sans-serif'] = [font_name]
                 plt.rcParams['axes.unicode_minus'] = False
-                print(f"成功设定中文字型: {font_name}")
+                print(f"成功設定中文字型: {font_name}")
                 return
         except Exception:
             continue
             
     print("警告: 未找到可用的中文字型。")
-    print("图表中的中文可能无法正确显示。")
-    print("请尝试安装以下任一字型: Microsoft JhengHei, PingFang TC, Noto Sans CJK TC")
+    print("圖表中的中文可能無法正確顯示。")
+    print("請嘗試安裝以下任一字型: Microsoft JhengHei, PingFang TC, Noto Sans CJK TC")
 
-set_chinese_font() # 执行字型设定
+set_chinese_font() # 執行字型設定
 
 def load_glucose_data(filepath):
     """
@@ -66,7 +66,7 @@ def plot_glucose_curve(data):
     """
     historic_data = [r for r in data if r['record_type'] == 0 and r['historic_glucose']]
     if not historic_data:
-        print("无历史血糖数据可供绘图。")
+        print("無歷史血糖數據可供繪圖。")
         return
         
     timestamps = [r['timestamp'] for r in historic_data]
