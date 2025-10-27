@@ -81,9 +81,50 @@ def plot_glucose_curve(data):
     if scan_data:
         scan_ts = [r['timestamp'] for r in scan_data]
         scan_val = [r['scan_glucose'] for r in scan_data]
-        ax.scatter(scan_ts, scan_val, c='orange', s=60, zorder=5)
-        for i, txt in enumerate(scan_val):
-            ax.annotate(txt, (scan_ts[i], scan_val[i]), textcoords="offset points", xytext=(0,8), ha='center', fontsize=9)
+        ax.scatter(scan_ts, scan_val, c='orange', s=20, zorder=5)
+
+    # --- 統一處理歷史與掃描數據，標註每兩小時內的最高點與最低點 ---
+    all_glucose_data = historic_data + scan_data
+    start_day_for_intervals = timestamps[0].replace(hour=0, minute=0, second=0)
+    annotated_points = set()
+
+    for i in range(12): # 將一天分為12個兩小時區間
+        interval_start = start_day_for_intervals + timedelta(hours=i*2)
+        interval_end = start_day_for_intervals + timedelta(hours=(i+1)*2)
+        
+        points_in_interval = [
+            p for p in all_glucose_data 
+            if interval_start <= p['timestamp'] < interval_end
+        ]
+        
+        if not points_in_interval:
+            continue
+            
+        # 找出區間內的最高與最低點
+        # 我們需要一個統一的鍵名來取得血糖值
+        get_glucose = lambda p: p.get('historic_glucose') or p.get('scan_glucose')
+        max_point = max(points_in_interval, key=get_glucose)
+        min_point = min(points_in_interval, key=get_glucose)
+        
+        # 標註最高點
+        max_val = get_glucose(max_point)
+        max_point_id = (max_point['timestamp'], max_val)
+        if max_point_id not in annotated_points:
+            ax.annotate(max_val,
+                        (max_point['timestamp'], max_val),
+                        textcoords="offset points", xytext=(0, 10),
+                        ha='center', fontsize=9)
+            annotated_points.add(max_point_id)
+
+        # 標註最低點
+        min_val = get_glucose(min_point)
+        min_point_id = (min_point['timestamp'], min_val)
+        if min_point_id not in annotated_points and min_point_id != max_point_id:
+            ax.annotate(min_val,
+                        (min_point['timestamp'], min_val),
+                        textcoords="offset points", xytext=(0, -20),
+                        ha='center', fontsize=9)
+            annotated_points.add(min_point_id)
 
     ax.set_ylim(0, 350)
     ax.set_yticks([0, 70, 180, 350])
