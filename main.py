@@ -38,7 +38,7 @@ def load_glucose_data(filepath):
     從指定的路徑載入並解析血糖數據 CSV 檔案。
     """
     data = []
-    with open(filepath, 'r', encoding='utf-8-sig', errors='ignore') as csvfile:
+    with open(filepath, 'r', encoding='utf-8') as csvfile:
         reader = csv.reader(csvfile)
         next(reader)
         header = next(reader)
@@ -98,7 +98,34 @@ def plot_glucose_curve(data):
     ax.set_title('每日血糖模式', fontsize=16)
     ax.grid(axis='x', linestyle='--', color='gray', alpha=0.5)
     
+    # --- 繪製備註 ---
+    notes_data = [r for r in data if r['record_type'] == 6 and r['notes']]
+    if notes_data:
+        note_y_positions = [-0.15, -0.25, -0.35, -0.45] # Y軸的相對位置，用來分行
+        note_last_x = {} # 記錄每一行的最後一個X位置，避免重疊
+
+        for i, note in enumerate(notes_data):
+            y_pos_index = i % len(note_y_positions)
+            y_pos = note_y_positions[y_pos_index]
+            
+            # 簡單的防重疊：如果跟同行前一個太近，就換行
+            if y_pos_index in note_last_x and (note['timestamp'] - note_last_x[y_pos_index]).total_seconds() < 7200:
+                 y_pos_index = (y_pos_index + 1) % len(note_y_positions)
+                 y_pos = note_y_positions[y_pos_index]
+
+            ax.annotate(note['notes'], 
+                        xy=(note['timestamp'], 0), 
+                        xycoords='data',
+                        xytext=(0, y_pos * ax.get_ylim()[1]), 
+                        textcoords='offset points',
+                        ha='center', 
+                        fontsize=9,
+                        arrowprops=dict(arrowstyle='->', color='gray'))
+            note_last_x[y_pos_index] = note['timestamp']
+
     fig.tight_layout()
+    # 調整圖表邊距，為下方的備註留出空間
+    plt.subplots_adjust(bottom=0.3)
     plt.show()
 
 if __name__ == '__main__':
