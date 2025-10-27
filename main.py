@@ -114,7 +114,7 @@ def plot_glucose_curve(data):
             ax.annotate(min_val, (min_point['timestamp'], min_val), textcoords="offset points", xytext=(0, -20), ha='center', fontsize=9)
             annotated_points.add(min_point_id)
 
-    ax.set_ylim(0, 450)
+    ax.set_ylim(0, 350)
     ax.set_yticks([0, 70, 180, 350])
     ax.set_ylabel('葡萄糖 mg/dL')
 
@@ -127,7 +127,7 @@ def plot_glucose_curve(data):
     ax.set_title('每日血糖模式', fontsize=16)
     ax.grid(axis='x', linestyle='--', color='gray', alpha=0.5)
     
-    # --- 繪製備註 (使用全新的、更穩健的「車道」防重疊演算法) ---
+    # --- 繪製備註 (最終版) ---
     notes_data = [r for r in data if r['record_type'] == 6 and r['notes']]
     if notes_data:
         # ... (avg_glucose calculation and sorting is correct) ...
@@ -137,11 +137,10 @@ def plot_glucose_curve(data):
         avg_glucose = sum(combined_values) / len(combined_values) if combined_values else 0
         notes_data.sort(key=lambda x: x['timestamp'])
 
-        # 定義上方與下方的Y軸「車道」(間距縮減一半)
+        # 定義上方與下方的Y軸「車道」(像素偏移)
         bottom_lanes_y = [-60, -80, -100]
-        top_lanes_y = [220, 242, 264]
+        top_lanes_y = [20, 42, 64] # 相對於圖表頂端的像素偏移
         
-        # 記錄每個車道的「最後結束時間」
         bottom_lanes_endtime = {i: None for i in range(len(bottom_lanes_y))}
         top_lanes_endtime = {i: None for i in range(len(top_lanes_y))}
 
@@ -163,44 +162,30 @@ def plot_glucose_curve(data):
             lanes_y = bottom_lanes_y if is_bottom else top_lanes_y
             lanes_endtime = bottom_lanes_endtime if is_bottom else top_lanes_endtime
             
-            # 估算此備註的寬度 (以秒為單位)
-            note_width_seconds = len(note['notes']) * 720 + 600 # 每個字寬12分鐘 + 10分鐘緩衝
-
-            # 尋找可用的車道
+            note_width_seconds = len(note['notes']) * 720 + 600
             chosen_lane = -1
             for i in range(len(lanes_y)):
                 if lanes_endtime[i] is None or note['timestamp'] > lanes_endtime[i]:
                     chosen_lane = i
                     break
-            
-            # 如果所有車道都滿了，就強制放在最後一條 (允許重疊)
             if chosen_lane == -1:
                 chosen_lane = len(lanes_y) - 1
-
-            # 更新車道的結束時間
             lanes_endtime[chosen_lane] = note['timestamp'] + timedelta(seconds=note_width_seconds)
             
-            # 繪製備註 (使用上一版已修正的對齊邏輯)
             y_pos = lanes_y[chosen_lane]
-            anchor_y = 0 if is_bottom else 200
+            anchor_y = 0 if is_bottom else 200 # 修正：上方備註的錨點應為 200
             va = 'top' if is_bottom else 'bottom'
 
-            if is_bottom:
-                ax.annotate(note['notes'],
-                            xy=(note['timestamp'], anchor_y), xycoords='data',
-                            xytext=(0, y_pos), textcoords='offset points',
-                            ha='left', va=va, fontsize=9,
-                            arrowprops=dict(arrowstyle="->", color='gray', shrinkB=5, relpos=(0.0, 1.0)),
-                            bbox=dict(boxstyle="round,pad=0.3", fc="white", ec="gray", lw=0.5, alpha=0.9))
-            else:
-                ax.annotate(note['notes'],
-                            xy=(note['timestamp'], anchor_y), xycoords='data',
-                            xytext=(note['timestamp'], y_pos), textcoords='data',
-                            ha='left', va=va, fontsize=9,
-                            arrowprops=dict(arrowstyle="->", color='gray', shrinkA=5, relpos=(0.0, 0.0)),
-                            bbox=dict(boxstyle="round,pad=0.3", fc="white", ec="gray", lw=0.5, alpha=0.9))
+            ax.annotate(note['notes'],
+                        xy=(note['timestamp'], anchor_y), xycoords='data',
+                        xytext=(0, y_pos), textcoords='offset points',
+                        ha='left', va=va, fontsize=9,
+                        arrowprops=dict(arrowstyle="->", color='gray', shrinkB=5, relpos=(0.0, 1.0) if is_bottom else (0.0, 0.0)),
+                        bbox=dict(boxstyle="round,pad=0.3", fc="white", ec="gray", lw=0.5, alpha=0.9))
 
-    fig.tight_layout()
+    # 調整圖表邊距，為上下方的備註留出足夠空間
+    fig.tight_layout(pad=1.5)
+    plt.subplots_adjust(bottom=0.25, top=0.85)
     plt.show()
 
 if __name__ == '__main__':
