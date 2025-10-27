@@ -1,4 +1,5 @@
 import csv
+import argparse
 from datetime import datetime, timedelta
 import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
@@ -10,15 +11,10 @@ def set_chinese_font():
     自動尋找並設定可用的中文字型。
     """
     supported_fonts = [
-        'Microsoft JhengHei',  # Windows - 微軟正黑體
-        'PingFang TC',         # macOS - 蘋方-繁
-        'Noto Sans CJK TC',    # Linux/Other - 思源黑體 繁中
-        'Arial Unicode MS'     # 通用 Unicode 字型
+        'Microsoft JhengHei', 'PingFang TC', 'Noto Sans CJK TC', 'Arial Unicode MS'
     ]
-    
     for font_name in supported_fonts:
         try:
-            # 檢查字型是否存在
             if any(font.name == font_name for font in fontManager.ttflist):
                 plt.rcParams['font.sans-serif'] = [font_name]
                 plt.rcParams['axes.unicode_minus'] = False
@@ -26,44 +22,49 @@ def set_chinese_font():
                 return
         except Exception:
             continue
-            
-    print("警告: 未找到可用的中文字型。")
-    print("圖表中的中文可能無法正確顯示。")
-    print("請嘗試安裝以下任一字型: Microsoft JhengHei, PingFang TC, Noto Sans CJK TC")
+    print("警告: 未找到可用的中文字型，圖表中的中文可能無法正確顯示。")
 
-set_chinese_font() # 執行字型設定
-
-def load_glucose_data(filepath):
+def load_glucose_data(filepath, target_date_str):
     """
-    從指定的路徑載入並解析血糖數據 CSV 檔案。
+    從指定的路徑載入 CSV，並只篩選出指定日期的資料。
     """
     data = []
-    with open(filepath, 'r', encoding='utf-8') as csvfile:
-        reader = csv.reader(csvfile)
-        next(reader)
-        header = next(reader)
+    try:
+        target_date = datetime.strptime(target_date_str, '%Y-%m-%d').date()
+        with open(filepath, 'r', encoding='utf-8') as csvfile:
+            reader = csv.reader(csvfile)
+            next(reader)
+            header = next(reader)
 
-        for row in reader:
-            if len(row) < len(header):
-                continue
-            try:
-                timestamp = datetime.strptime(row[2], '%Y-%m-%d %H:%M')
-                record = {
-                    'timestamp': timestamp,
-                    'record_type': int(row[3]),
-                    'historic_glucose': int(row[4]) if row[4] else None,
-                    'scan_glucose': int(row[5]) if row[5] else None,
-                    'notes': row[13] if row[13] else None
-                }
-                data.append(record)
-            except (ValueError, IndexError):
-                pass
+            for row in reader:
+                if len(row) < len(header):
+                    continue
+                try:
+                    timestamp = datetime.strptime(row[2], '%Y-%m-%d %H:%M')
+                    if timestamp.date() != target_date:
+                        continue # 如果日期不符，就跳過此筆紀錄
+
+                    record = {
+                        'timestamp': timestamp,
+                        'record_type': int(row[3]),
+                        'historic_glucose': int(row[4]) if row[4] else None,
+                        'scan_glucose': int(row[5]) if row[5] else None,
+                        'notes': row[13] if row[13] else None
+                    }
+                    data.append(record)
+                except (ValueError, IndexError):
+                    pass
+    except FileNotFoundError:
+        print(f"錯誤: 找不到檔案 '{filepath}'")
+    except Exception as e:
+        print(f"讀取檔案時發生錯誤: {e}")
     return data
 
-def plot_glucose_curve(data):
+def plot_glucose_curve(data, date_str):
     """
     繪製血糖曲線圖。
     """
+    # ... (函式其餘內容不變，除了標題設定)
     historic_data = [r for r in data if r['record_type'] == 0 and r['historic_glucose']]
     if not historic_data:
         print("無歷史血糖數據可供繪圖。")
@@ -85,7 +86,6 @@ def plot_glucose_curve(data):
 
     all_glucose_data = historic_data + scan_data
     
-    # --- 標註每兩小時內的最高點與最低點 ---
     start_day_for_intervals = timestamps[0].replace(hour=0, minute=0, second=0)
     annotated_points = set()
 
@@ -115,7 +115,6 @@ def plot_glucose_curve(data):
             annotated_points.add(min_point_id)
 
     ax.set_ylim(0, 350)
-    # 設定更精細的Y軸刻度
     y_ticks = [0] + list(range(70, 181, 10)) + [350]
     ax.set_yticks(y_ticks)
     ax.set_ylabel('葡萄糖 mg/dL')
@@ -123,34 +122,28 @@ def plot_glucose_curve(data):
     start_day = timestamps[0].replace(hour=0, minute=0, second=0)
     end_day = start_day + timedelta(days=1)
     ax.set_xlim(start_day, end_day)
-    # 設定更精細的X軸刻度
     ax.xaxis.set_major_locator(mdates.HourLocator(interval=1))
     ax.xaxis.set_major_formatter(mdates.DateFormatter('%H:%M'))
     
-    # 從資料中取得日期，並設定為圖表標題
-    date_str = timestamps[0].strftime('%Y/%m/%d')
-    ax.set_title(f'{date_str} 血糖記錄', fontsize=16)
+    formatted_date = date_str.replace('-', '/')
+    ax.set_title(f'{formatted_date} 血糖記錄', fontsize=16)
     ax.grid(axis='x', linestyle='--', color='gray', alpha=0.5)
     
-    # --- 繪製備註 (最終版) ---
     notes_data = [r for r in data if r['record_type'] == 6 and r['notes']]
     if notes_data:
-        # ... (avg_glucose calculation and sorting is correct) ...
         all_glucose_values = [g for g in glucose if g is not None]
         scan_glucose_values = [r['scan_glucose'] for r in scan_data if r['scan_glucose'] is not None]
         combined_values = all_glucose_values + scan_glucose_values
         avg_glucose = sum(combined_values) / len(combined_values) if combined_values else 0
         notes_data.sort(key=lambda x: x['timestamp'])
 
-        # 定義上方與下方的Y軸「車道」(像素偏移)
         bottom_lanes_y = [-60, -80, -100]
-        top_lanes_y = [20, 42, 64] # 相對於圖表頂端的像素偏移
+        top_lanes_y = [20, 42, 64]
         
         bottom_lanes_endtime = {i: None for i in range(len(bottom_lanes_y))}
         top_lanes_endtime = {i: None for i in range(len(top_lanes_y))}
 
         for note in notes_data:
-            # ... (cur_glucose calculation is correct) ...
             cur_glucose = None
             for p in all_glucose_data:
                 if p['timestamp'] == note['timestamp']:
@@ -178,7 +171,7 @@ def plot_glucose_curve(data):
             lanes_endtime[chosen_lane] = note['timestamp'] + timedelta(seconds=note_width_seconds)
             
             y_pos = lanes_y[chosen_lane]
-            anchor_y = 0 if is_bottom else 200 # 修正：上方備註的錨點應為 200
+            anchor_y = 0 if is_bottom else 200
             va = 'top' if is_bottom else 'bottom'
 
             ax.annotate(note['notes'],
@@ -188,12 +181,24 @@ def plot_glucose_curve(data):
                         arrowprops=dict(arrowstyle="->", color='gray', shrinkB=5, relpos=(0.0, 1.0) if is_bottom else (0.0, 0.0)),
                         bbox=dict(boxstyle="round,pad=0.3", fc="white", ec="gray", lw=0.5, alpha=0.9))
 
-    # 調整圖表邊距，為上下方的備註留出足夠空間
     fig.tight_layout(pad=1.5)
     plt.subplots_adjust(bottom=0.25, top=0.85)
     plt.show()
 
 if __name__ == '__main__':
-    csv_filepath = 'requirement/sample-glucose_2025-10-27.csv'
-    glucose_records = load_glucose_data(csv_filepath)
-    plot_glucose_curve(glucose_records)
+    # 設定命令列參數解析
+    parser = argparse.ArgumentParser(description='從 LibreView CSV 檔案產生血糖統計圖。')
+    parser.add_argument('-f', '--file', required=True, help='輸入的 CSV 資料檔案路徑。')
+    parser.add_argument('-d', '--date', required=True, help='要統計的日期，格式為 YYYY-MM-DD。')
+    args = parser.parse_args()
+
+    set_chinese_font()
+    
+    # 載入指定日期的資料
+    glucose_records = load_glucose_data(args.file, args.date)
+
+    # 如果有找到資料，才繪製圖表
+    if glucose_records:
+        plot_glucose_curve(glucose_records, args.date)
+    else:
+        print(f"在檔案 '{args.file}' 中找不到日期為 '{args.date}' 的任何資料。")
