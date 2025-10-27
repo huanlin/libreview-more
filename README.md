@@ -30,7 +30,7 @@
 1. **複製專案**
 
     ```shell
-    git clone https://github.com/your-username/libreview-more.git
+    git clone https://github.com/huanlin/libreview-more.git
     cd libreview-more
     ```
 
