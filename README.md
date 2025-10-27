@@ -2,7 +2,7 @@
 
 這是一個 Python 程式，用於讀取從 FreeStyle LibreView 網站匯出的血糖數據 CSV 檔案，並產生專業、易於閱讀的單日血糖模式統計圖。
 
-> 備註：初版程式碼完全由 Gemini CLI 生成。在 [prompts](prompts) 資料夾底下有整理一些與 AI agent 互動過程的 prompts。（提醒：排版很凌亂）
+> 備註：初版程式碼完全由 Gemini CLI 生成。在 [prompts](prompts) 資料夾底下有整理一些與 AI agent 互動過程的 prompts（只是排版很凌亂，欠缺整理）。
 
 ## 功能特色
 
