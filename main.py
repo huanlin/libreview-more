@@ -72,7 +72,7 @@ def plot_glucose_curve(data):
     timestamps = [r['timestamp'] for r in historic_data]
     glucose = [r['historic_glucose'] for r in historic_data]
 
-    fig, ax = plt.subplots(figsize=(17, 6))
+    fig, ax = plt.subplots(figsize=(17, 8))
     
     ax.axhspan(70, 180, color='gray', alpha=0.2)
     ax.plot(timestamps, glucose, marker='o', linestyle='-', color='#1f77b4', markersize=4, zorder=4)
@@ -83,50 +83,38 @@ def plot_glucose_curve(data):
         scan_val = [r['scan_glucose'] for r in scan_data]
         ax.scatter(scan_ts, scan_val, c='orange', s=20, zorder=5)
 
-    # --- 統一處理歷史與掃描數據，標註每兩小時內的最高點與最低點 ---
     all_glucose_data = historic_data + scan_data
+    
+    # --- 標註每兩小時內的最高點與最低點 ---
     start_day_for_intervals = timestamps[0].replace(hour=0, minute=0, second=0)
     annotated_points = set()
 
-    for i in range(12): # 將一天分為12個兩小時區間
+    for i in range(12):
         interval_start = start_day_for_intervals + timedelta(hours=i*2)
         interval_end = start_day_for_intervals + timedelta(hours=(i+1)*2)
         
-        points_in_interval = [
-            p for p in all_glucose_data 
-            if interval_start <= p['timestamp'] < interval_end
-        ]
+        points_in_interval = [p for p in all_glucose_data if interval_start <= p['timestamp'] < interval_end]
         
         if not points_in_interval:
             continue
             
-        # 找出區間內的最高與最低點
-        # 我們需要一個統一的鍵名來取得血糖值
         get_glucose = lambda p: p.get('historic_glucose') or p.get('scan_glucose')
         max_point = max(points_in_interval, key=get_glucose)
         min_point = min(points_in_interval, key=get_glucose)
         
-        # 標註最高點
         max_val = get_glucose(max_point)
         max_point_id = (max_point['timestamp'], max_val)
         if max_point_id not in annotated_points:
-            ax.annotate(max_val,
-                        (max_point['timestamp'], max_val),
-                        textcoords="offset points", xytext=(0, 10),
-                        ha='center', fontsize=9)
+            ax.annotate(max_val, (max_point['timestamp'], max_val), textcoords="offset points", xytext=(0, 10), ha='center', fontsize=9)
             annotated_points.add(max_point_id)
 
-        # 標註最低點
         min_val = get_glucose(min_point)
         min_point_id = (min_point['timestamp'], min_val)
         if min_point_id not in annotated_points and min_point_id != max_point_id:
-            ax.annotate(min_val,
-                        (min_point['timestamp'], min_val),
-                        textcoords="offset points", xytext=(0, -20),
-                        ha='center', fontsize=9)
+            ax.annotate(min_val, (min_point['timestamp'], min_val), textcoords="offset points", xytext=(0, -20), ha='center', fontsize=9)
             annotated_points.add(min_point_id)
 
-    ax.set_ylim(0, 350)
+    ax.set_ylim(0, 450)
     ax.set_yticks([0, 70, 180, 350])
     ax.set_ylabel('葡萄糖 mg/dL')
 
@@ -139,34 +127,81 @@ def plot_glucose_curve(data):
     ax.set_title('每日血糖模式', fontsize=16)
     ax.grid(axis='x', linestyle='--', color='gray', alpha=0.5)
     
-    # --- 繪製備註 ---
+    # --- 繪製備註 (依據血糖高低，上下動態排列) ---
     notes_data = [r for r in data if r['record_type'] == 6 and r['notes']]
     if notes_data:
-        note_y_positions = [-0.15, -0.25, -0.35, -0.45] # Y軸的相對位置，用來分行
-        note_last_x = {} # 記錄每一行的最後一個X位置，避免重疊
+        all_glucose_values = [g for g in glucose if g is not None]
+        scan_glucose_values = [r['scan_glucose'] for r in scan_data if r['scan_glucose'] is not None]
+        combined_values = all_glucose_values + scan_glucose_values
+        avg_glucose = sum(combined_values) / len(combined_values) if combined_values else 0
 
-        for i, note in enumerate(notes_data):
-            y_pos_index = i % len(note_y_positions)
-            y_pos = note_y_positions[y_pos_index]
+        notes_data.sort(key=lambda x: x['timestamp'])
+
+        bottom_y_levels = [-60, -100, -140]
+        top_y_levels = [220, 265, 310]
+        
+        last_note_info_bottom = None
+        last_note_info_top = None
+
+        for note in notes_data:
+            cur_glucose = None
+            for p in all_glucose_data:
+                if p['timestamp'] == note['timestamp']:
+                    cur_glucose = p.get('historic_glucose') or p.get('scan_glucose')
+                    break
+            if cur_glucose is None:
+                closest_point = min([p for p in all_glucose_data if p['timestamp'] < note['timestamp']], key=lambda x: note['timestamp'] - x['timestamp'], default=None)
+                if closest_point:
+                    cur_glucose = closest_point.get('historic_glucose') or closest_point.get('scan_glucose')
+            if cur_glucose is None:
+                cur_glucose = avg_glucose
+
+            is_bottom = cur_glucose < avg_glucose
+
+            if is_bottom:
+                levels = bottom_y_levels
+                last_info = last_note_info_bottom
+                anchor_y = 0
+                va = 'top'
+            else:
+                levels = top_y_levels
+                last_info = last_note_info_top
+                anchor_y = 200
+                va = 'bottom'
+
+            chosen_level_index = 0
+            if last_info:
+                last_ts, last_len, last_level_index = last_info
+                required_seconds = (last_len / 2 + len(note['notes']) / 2) * 720
+                actual_seconds = (note['timestamp'] - last_ts).total_seconds()
+                if actual_seconds < required_seconds:
+                    chosen_level_index = min(last_level_index + 1, len(levels) - 1)
             
-            # 簡單的防重疊：如果跟同行前一個太近，就換行
-            if y_pos_index in note_last_x and (note['timestamp'] - note_last_x[y_pos_index]).total_seconds() < 7200:
-                 y_pos_index = (y_pos_index + 1) % len(note_y_positions)
-                 y_pos = note_y_positions[y_pos_index]
+            y_pos = levels[chosen_level_index]
 
-            ax.annotate(note['notes'], 
-                        xy=(note['timestamp'], 0), 
-                        xycoords='data',
-                        xytext=(0, y_pos * ax.get_ylim()[1]), 
-                        textcoords='offset points',
-                        ha='center', 
-                        fontsize=9,
-                        arrowprops=dict(arrowstyle='->', color='gray'))
-            note_last_x[y_pos_index] = note['timestamp']
+            if is_bottom:
+                # --- 下方備註：relpos=(0,1) 表示箭頭從文字框的「左上角」出發 ---
+                ax.annotate(note['notes'],
+                            xy=(note['timestamp'], anchor_y), xycoords='data',
+                            xytext=(0, y_pos), textcoords='offset points',
+                            ha='left', va='top', fontsize=9,
+                            arrowprops=dict(arrowstyle="->", color='gray', shrinkB=5, relpos=(0.0, 1.0)),
+                            bbox=dict(boxstyle="round,pad=0.3", fc="white", ec="gray", lw=0.5, alpha=0.9))
+            else:
+                # --- 上方備註：relpos=(0,0) 表示箭頭從文字框的「左下角」出發 ---
+                ax.annotate(note['notes'],
+                            xy=(note['timestamp'], anchor_y), xycoords='data',
+                            xytext=(note['timestamp'], y_pos), textcoords='data',
+                            ha='left', va='bottom', fontsize=9,
+                            arrowprops=dict(arrowstyle="->", color='gray', shrinkA=5, relpos=(0.0, 0.0)),
+                            bbox=dict(boxstyle="round,pad=0.3", fc="white", ec="gray", lw=0.5, alpha=0.9))
+
+            if is_bottom:
+                last_note_info_bottom = (note['timestamp'], len(note['notes']), chosen_level_index)
+            else:
+                last_note_info_top = (note['timestamp'], len(note['notes']), chosen_level_index)
 
     fig.tight_layout()
-    # 調整圖表邊距，為下方的備註留出空間
-    plt.subplots_adjust(bottom=0.3)
     plt.show()
 
 if __name__ == '__main__':
