@@ -127,23 +127,26 @@ def plot_glucose_curve(data):
     ax.set_title('每日血糖模式', fontsize=16)
     ax.grid(axis='x', linestyle='--', color='gray', alpha=0.5)
     
-    # --- 繪製備註 (依據血糖高低，上下動態排列) ---
+    # --- 繪製備註 (使用全新的、更穩健的「車道」防重疊演算法) ---
     notes_data = [r for r in data if r['record_type'] == 6 and r['notes']]
     if notes_data:
+        # ... (avg_glucose calculation and sorting is correct) ...
         all_glucose_values = [g for g in glucose if g is not None]
         scan_glucose_values = [r['scan_glucose'] for r in scan_data if r['scan_glucose'] is not None]
         combined_values = all_glucose_values + scan_glucose_values
         avg_glucose = sum(combined_values) / len(combined_values) if combined_values else 0
-
         notes_data.sort(key=lambda x: x['timestamp'])
 
-        bottom_y_levels = [-60, -100, -140]
-        top_y_levels = [220, 265, 310]
+        # 定義上方與下方的Y軸「車道」(間距縮減一半)
+        bottom_lanes_y = [-60, -80, -100]
+        top_lanes_y = [220, 242, 264]
         
-        last_note_info_bottom = None
-        last_note_info_top = None
+        # 記錄每個車道的「最後結束時間」
+        bottom_lanes_endtime = {i: None for i in range(len(bottom_lanes_y))}
+        top_lanes_endtime = {i: None for i in range(len(top_lanes_y))}
 
         for note in notes_data:
+            # ... (cur_glucose calculation is correct) ...
             cur_glucose = None
             for p in all_glucose_data:
                 if p['timestamp'] == note['timestamp']:
@@ -157,49 +160,45 @@ def plot_glucose_curve(data):
                 cur_glucose = avg_glucose
 
             is_bottom = cur_glucose < avg_glucose
-
-            if is_bottom:
-                levels = bottom_y_levels
-                last_info = last_note_info_bottom
-                anchor_y = 0
-                va = 'top'
-            else:
-                levels = top_y_levels
-                last_info = last_note_info_top
-                anchor_y = 200
-                va = 'bottom'
-
-            chosen_level_index = 0
-            if last_info:
-                last_ts, last_len, last_level_index = last_info
-                required_seconds = (last_len / 2 + len(note['notes']) / 2) * 720
-                actual_seconds = (note['timestamp'] - last_ts).total_seconds()
-                if actual_seconds < required_seconds:
-                    chosen_level_index = min(last_level_index + 1, len(levels) - 1)
+            lanes_y = bottom_lanes_y if is_bottom else top_lanes_y
+            lanes_endtime = bottom_lanes_endtime if is_bottom else top_lanes_endtime
             
-            y_pos = levels[chosen_level_index]
+            # 估算此備註的寬度 (以秒為單位)
+            note_width_seconds = len(note['notes']) * 720 + 600 # 每個字寬12分鐘 + 10分鐘緩衝
+
+            # 尋找可用的車道
+            chosen_lane = -1
+            for i in range(len(lanes_y)):
+                if lanes_endtime[i] is None or note['timestamp'] > lanes_endtime[i]:
+                    chosen_lane = i
+                    break
+            
+            # 如果所有車道都滿了，就強制放在最後一條 (允許重疊)
+            if chosen_lane == -1:
+                chosen_lane = len(lanes_y) - 1
+
+            # 更新車道的結束時間
+            lanes_endtime[chosen_lane] = note['timestamp'] + timedelta(seconds=note_width_seconds)
+            
+            # 繪製備註 (使用上一版已修正的對齊邏輯)
+            y_pos = lanes_y[chosen_lane]
+            anchor_y = 0 if is_bottom else 200
+            va = 'top' if is_bottom else 'bottom'
 
             if is_bottom:
-                # --- 下方備註：relpos=(0,1) 表示箭頭從文字框的「左上角」出發 ---
                 ax.annotate(note['notes'],
                             xy=(note['timestamp'], anchor_y), xycoords='data',
                             xytext=(0, y_pos), textcoords='offset points',
-                            ha='left', va='top', fontsize=9,
+                            ha='left', va=va, fontsize=9,
                             arrowprops=dict(arrowstyle="->", color='gray', shrinkB=5, relpos=(0.0, 1.0)),
                             bbox=dict(boxstyle="round,pad=0.3", fc="white", ec="gray", lw=0.5, alpha=0.9))
             else:
-                # --- 上方備註：relpos=(0,0) 表示箭頭從文字框的「左下角」出發 ---
                 ax.annotate(note['notes'],
                             xy=(note['timestamp'], anchor_y), xycoords='data',
                             xytext=(note['timestamp'], y_pos), textcoords='data',
-                            ha='left', va='bottom', fontsize=9,
+                            ha='left', va=va, fontsize=9,
                             arrowprops=dict(arrowstyle="->", color='gray', shrinkA=5, relpos=(0.0, 0.0)),
                             bbox=dict(boxstyle="round,pad=0.3", fc="white", ec="gray", lw=0.5, alpha=0.9))
-
-            if is_bottom:
-                last_note_info_bottom = (note['timestamp'], len(note['notes']), chosen_level_index)
-            else:
-                last_note_info_top = (note['timestamp'], len(note['notes']), chosen_level_index)
 
     fig.tight_layout()
     plt.show()
