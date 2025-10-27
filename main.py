@@ -115,13 +115,16 @@ def plot_glucose_curve(data):
             annotated_points.add(min_point_id)
 
     ax.set_ylim(0, 350)
-    ax.set_yticks([0, 70, 180, 350])
+    # 設定更精細的Y軸刻度
+    y_ticks = [0] + list(range(70, 181, 10)) + [350]
+    ax.set_yticks(y_ticks)
     ax.set_ylabel('葡萄糖 mg/dL')
 
     start_day = timestamps[0].replace(hour=0, minute=0, second=0)
     end_day = start_day + timedelta(days=1)
     ax.set_xlim(start_day, end_day)
-    ax.xaxis.set_major_locator(mdates.HourLocator(interval=2))
+    # 設定更精細的X軸刻度
+    ax.xaxis.set_major_locator(mdates.HourLocator(interval=1))
     ax.xaxis.set_major_formatter(mdates.DateFormatter('%H:%M'))
     
     ax.set_title('每日血糖模式', fontsize=16)
