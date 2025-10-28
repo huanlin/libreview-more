@@ -58,6 +58,9 @@ def load_glucose_data(filepath, target_date_str):
         print(f"錯誤: 找不到檔案 '{filepath}'")
     except Exception as e:
         print(f"讀取檔案時發生錯誤: {e}")
+    
+    # 依時間戳記排序，確保繪圖時順序正確
+    data.sort(key=lambda r: r['timestamp'])
     return data
 
 def plot_glucose_curve(data, date_str):
