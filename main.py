@@ -8,21 +8,30 @@ from matplotlib.font_manager import fontManager
 # --- 自動設定中文字型 ---
 def set_chinese_font():
     """
-    自動尋找並設定可用的中文字型。
+    自動尋找並設定可用的中文字型（並支援 Emoji）。
+    會建立一個字型列表，讓 Matplotlib 可以依序選用。
     """
-    supported_fonts = [
-        'Microsoft JhengHei', 'PingFang TC', 'Noto Sans CJK TC', 'Arial Unicode MS'
+    # 調整字型順序，優先使用中文字型，並將 Emoji 字型作為備援。
+    font_preferences = [
+        'Microsoft JhengHei',    # Windows 預設繁中
+        'PingFang TC',           # macOS 預設繁中
+        'Noto Sans CJK TC',      # Google 免費字型
+        'Segoe UI Emoji',       # Windows Emoji 備援
     ]
-    for font_name in supported_fonts:
-        try:
-            if any(font.name == font_name for font in fontManager.ttflist):
-                plt.rcParams['font.sans-serif'] = [font_name]
-                plt.rcParams['axes.unicode_minus'] = False
-                print(f"成功設定中文字型: {font_name}")
-                return
-        except Exception:
-            continue
-    print("警告: 未找到可用的中文字型，圖表中的中文可能無法正確顯示。")
+    
+    available_fonts = []
+    for font_name in font_preferences:
+        # 檢查字型是否存在於系統中
+        if any(font.name == font_name for font in fontManager.ttflist):
+            available_fonts.append(font_name)
+
+    if available_fonts:
+        # 設定字型列表
+        plt.rcParams['font.sans-serif'] = available_fonts
+        plt.rcParams['axes.unicode_minus'] = False
+        print(f"成功設定字型 (依優先順序): {', '.join(available_fonts)}")
+    else:
+        print("警告: 未找到任何建議的中文字型或 Emoji 字型，圖表中的特殊字元可能無法正確顯示。")
 
 def load_glucose_data(filepath, target_date_str):
     """
